@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>AO-ONI: BUNKER</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Nosifer&family=Noto+Sans+KR:wght@400;700;900&display=swap');
+  :root{
+    --blood:#b8151d;
+    --blood-bright:#ff2b2b;
+    --void:#020203;
+    --fog:#7a7a86;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{width:100%;height:100%;background:var(--void);overflow:hidden;font-family:'Noto Sans KR',sans-serif;}
+  canvas#c{position:fixed;inset:0;display:block;}
+  canvas#preview{width:240px;height:240px;filter:drop-shadow(0 0 18px rgba(255,40,40,.35));}
+
+  #loading{
+    position:fixed;inset:0;background:var(--void);z-index:50;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+  }
+  #loading .title{font-family:'Nosifer',cursive;color:var(--blood-bright);font-size:34px;letter-spacing:2px;text-shadow:0 0 24px rgba(255,30,30,.6);}
+  #loadingTrack{width:320px;height:6px;background:#1a1a1e;border-radius:4px;overflow:hidden;}
+  #loadingBar{height:100%;width:0%;background:linear-gradient(90deg,var(--blood),var(--blood-bright));transition:width .25s ease;}
+  #loadingTxt{color:var(--fog);font-size:13px;letter-spacing:1px;}
+  #errorBox{
+    display:none;max-width:560px;white-space:pre-wrap;color:#ff8080;background:rgba(80,0,0,.3);
+    border:1px solid #802020;padding:14px;font-size:12px;line-height:1.6;font-family:monospace;
+  }
+
+  #menu{
+    position:fixed;inset:0;z-index:40;display:none;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+    background:radial-gradient(ellipse at center, rgba(30,0,0,.55), rgba(0,0,0,.92) 70%);
+  }
+  #menu .title{font-family:'Nosifer',cursive;color:var(--blood-bright);font-size:52px;text-align:center;text-shadow:0 0 30px rgba(255,20,20,.7);letter-spacing:3px;}
+  #menu .sub{color:var(--fog);font-size:14px;letter-spacing:1px;text-align:center;max-width:460px;line-height:1.7;}
+  #startBtn{
+    margin-top:8px;padding:14px 46px;background:transparent;border:2px solid var(--blood-bright);color:var(--blood-bright);
+    font-family:'Noto Sans KR',sans-serif;font-weight:900;font-size:16px;letter-spacing:3px;cursor:pointer;
+    transition:.2s;text-transform:uppercase;
+  }
+  #startBtn:disabled{border-color:#333;color:#333;cursor:wait;}
+  #startBtn:not(:disabled):hover{background:var(--blood-bright);color:#000;box-shadow:0 0 30px rgba(255,30,30,.7);}
+  #howto{color:#555;font-size:12px;letter-spacing:1px;line-height:2;text-align:center;margin-top:6px;}
+  #howto b{color:var(--fog);}
+
+  #hud{position:fixed;inset:0;z-index:20;display:none;pointer-events:none;}
+  #hud .topbar{position:absolute;top:22px;left:0;right:0;display:flex;justify-content:space-between;padding:0 34px;}
+  #targets{color:#ddd;font-size:14px;letter-spacing:1px;background:rgba(10,0,0,.45);padding:8px 16px;border-left:3px solid var(--blood-bright);}
+  #timer{color:var(--blood-bright);font-size:22px;font-weight:900;background:rgba(10,0,0,.45);padding:6px 18px;letter-spacing:2px;}
+  #crosshair{position:absolute;top:50%;left:50%;width:6px;height:6px;background:rgba(255,40,40,.85);border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 8px rgba(255,40,40,.9);}
+  #vignette{position:absolute;inset:0;box-shadow:inset 0 0 220px 60px rgba(0,0,0,.9);pointer-events:none;}
+
+  #end{position:fixed;inset:0;z-index:50;display:none;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(0,0,0,.94);}
+  #endTitle{font-family:'Nosifer',cursive;font-size:44px;letter-spacing:2px;}
+  #endDesc{color:var(--fog);font-size:14px;max-width:440px;text-align:center;line-height:1.7;}
+  #restartBtn{margin-top:10px;padding:12px 34px;background:transparent;border:2px solid var(--fog);color:var(--fog);font-weight:900;letter-spacing:2px;cursor:pointer;}
+  #restartBtn:hover{border-color:#fff;color:#fff;}
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="loading">
+  <div class="title">AO-ONI : BUNKER</div>
+  <div id="loadingTrack"><div id="loadingBar"></div></div>
+  <div id="loadingTxt">에셋을 불러오는 중...</div>
+  <div id="errorBox"></div>
+</div>
+
+<div id="menu">
+  <canvas id="preview" width="240" height="240"></canvas>
+  <div class="title">AO-ONI<br>BUNKER</div>
+  <div class="sub">당신은 벙커에 갇힌 아오오니다.<br>어둠 속으로 숨어든 생존자들을 시간 안에 모두 찾아내라.</div>
+  <button id="startBtn" disabled>불러오는 중...</button>
+  <div id="howto">
+    <b>WASD</b> 이동 &nbsp;·&nbsp; <b>SHIFT</b> 질주 &nbsp;·&nbsp; <b>SPACE</b> 점프 &nbsp;·&nbsp; <b>마우스</b> 시점 &nbsp;·&nbsp; <b>ESC</b> 일시정지
+  </div>
+</div>
+
+<div id="hud">
+  <div class="topbar">
+    <div id="targets">남은 생존자: 5 / 5</div>
+    <div id="timer">2:30</div>
+  </div>
+  <div id="crosshair"></div>
+  <div id="vignette"></div>
+</div>
+
+<div id="end">
+  <div id="endTitle">-</div>
+  <div id="endDesc">-</div>
+  <button id="restartBtn">다시 사냥하기</button>
+</div>
+
+<script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/libs/fflate.min.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/loaders/FBXLoader.js"></script>
+<script src="https://unpkg.com/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
