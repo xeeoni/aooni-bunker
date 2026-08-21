@@ -295,7 +295,15 @@
     if (!wallMeshes.length || dist <= 0) return false;
     const perp = new THREE.Vector3(-ndz, 0, ndx); // 이동 방향에 수직인 축 (플레이어 폭을 흉내내기 위한 오프셋)
     const offsets = [-radius * 0.85, 0, radius * 0.85];
-    const heights = [0.35, 1.5]; // 발목 근처 + 머리 근처, 둘 다 확인해서 낮은 장애물/문 상단 모두 감지
+    // ⚠ 예전에는 발목 높이를 고정값(0.35m)으로 검사했다. 그런데 계단은 STEP_MAX(0.6m)까지는
+    //   "밟고 올라가야 정상"인데, 0.35~0.6m 사이 높이의 디딤판/챌판(계단 한 칸의 수직면)이
+    //   이 발목 레이에 걸리면 실제로는 오를 수 있는 높이인데도 "벽"으로 오판해 수평 이동 자체를
+    //   막아버렸다. 그러면 위로 올라갈 기회(updateStandingHeight)조차 오지 않아 제자리에서
+    //   못 움직이고, 점프는 캐릭터 모델(playerModel)의 겉모습만 띄울 뿐 실제 충돌 판정에 쓰는
+    //   playerRig 위치는 전혀 바뀌지 않으므로 점프로도 이 벽을 넘을 수 없었다.
+    //   → 발목 높이 판정선을 STEP_MAX 바로 위로 올려서, 계단처럼 "밟고 오를 수 있는" 높이의
+    //   턱은 통과시키고, 그보다 높은(진짜) 장애물만 걸리게 한다.
+    const heights = [STEP_MAX + 0.05, 1.5]; // 계단으로 오를 수 있는 높이(STEP_MAX) 바로 위 + 머리 근처
     const dir = new THREE.Vector3(ndx, 0, ndz);
     for (const off of offsets) {
       const ox = px + perp.x * off;
@@ -770,7 +778,17 @@
           child.geometry.computeBoundingBox();
           const b = child.geometry.boundingBox.clone().applyMatrix4(child.matrixWorld);
           if (isWall) wallMeshes.push(child);
-          if (!isCeil) groundMeshes.push(child); // 계단/경사로 포함, 천장만 제외하고 발밑 판정 대상에 등록
+          // ⚠ 예전에는 "천장만 빼고" 벽까지 발밑 판정 대상(groundMeshes)에 넣었다. 그런데 벽 메시는
+          //   난간·창틀·문틀·상단 몰딩처럼 위쪽을 향한(normal.y > 0.5) 좁은 면을 군데군데 가지고
+          //   있어서, 그 면이 우연히 생존자 스폰 지점이나 이동 경로 바로 위에 있으면
+          //   "여기가 바닥이다"로 착각해 생존자가 벽 꼭대기(허공)에 스폰되거나 올라가 붙는
+          //   원인이 됐다(스크린샷에서 생존자가 벽/문틀 위에 붕 떠 있던 현상).
+          //   또한 그렇게 엉뚱하게 높은 곳에 서게 되면 벽 충돌 판정(rayBlocked)의 기준 높이도
+          //   같이 어긋나서, 실제 벽 두께를 비껴가는 높이에서 레이가 나가 벽을 뚫고 지나가는
+          //   것처럼 보이는 원인도 됐다.
+          //   → 계단/경사로는 실제로 "HouseFloor"(바닥) 메시에 포함돼 있으므로, 발밑 판정
+          //   대상에서는 벽을 완전히 제외해도 계단을 오르내리는 데는 문제가 없다.
+          if (!isCeil && !isWall) groundMeshes.push(child); // 계단/경사로(바닥 메시 소속)는 포함, 천장·벽은 제외
           // ⚠ 레벨 경계는 벽/바닥/천장(=실제 실내 구조)만으로 계산한다.
           //   모듈러 키트에는 이름이 다른 소품/장식/외부 구조 메시가 섞여 있을 수 있는데,
           //   그런 것까지 전부 합쳐 경계를 잡으면 실제 플레이 공간보다 훨씬 커져서
